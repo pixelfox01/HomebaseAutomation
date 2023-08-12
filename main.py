@@ -18,19 +18,47 @@ with sync_playwright() as p:
 
     calendar_service = get_calendar_service()
 
-    for shift in soup.find_all('li', class_='js-profile-shift'):
+    shifts = soup.find_all('li', class_='js-profile-shift')
+
+    for shift in shifts:
         date = ' '.join(shift.find("div", class_="date").text.strip().split()[1:])
-        start_time = shift.find("div", class_="time").text.strip().split()[0]
-        end_time = shift.find("div", class_="time").text.strip().split()[2]
+        time = shift.find("div", class_="time").text.strip()
+        start_time = time.split()[0]
+        end_time = time.split()[2]
         start_str = date + ' ' + start_time
         end_str = date + ' ' + end_time
         start = datetime.strptime(start_str, '%b %d, %Y %I:%M%p').isoformat()
         end = datetime.strptime(end_str, '%b %d, %Y %I:%M%p').isoformat()
 
-        event_result = calendar_service.events().insert(calendarId='primary',
-                                                        body={
-                                                            "summary": 'HMC Athletics',
-                                                            "start": {"dateTime": start, "timeZone": 'America/Toronto'},
-                                                            "end": {"dateTime": end, "timeZone": 'America/Toronto'},
-                                                        }
-                                                        ).execute()
+        new_event = {
+            "summary": 'HMC Athletics',
+            "location": "Sheridan College",
+            "start": {"dateTime": start, "timeZone": 'America/Toronto'},
+            "end": {"dateTime": end, "timeZone": 'America/Toronto'},
+            "reminders": {
+                "useDefault": False,
+                "overrides": [
+                    {
+                        "method": "popup",
+                        "minutes": 15 * 60
+                    },
+                    {
+                        "method": "popup",
+                        "minutes": 1 * 60
+                    }
+                ]
+            }
+        }
+
+        events = calendar_service.events().list(calendarId='primary', timeMin=f"{start}Z", timeMax=f"{end}Z").execute()
+
+        already_exists = False
+
+        for event in events["items"]:
+            if event["summary"] == "HMC Athletics":
+                already_exists = True
+
+        if not already_exists:
+            calendar_service.events().insert(calendarId='primary', body=new_event).execute()
+        else:
+            print("Event already exists")
